@@ -5,8 +5,8 @@ process.on("message", async ({ baseUrl, numRequests }) => {
 
   for (let i = 0; i < numRequests; i++) {
     const payload = {
-      key: `key${i}`,
-      value: `value${i}`,
+      key: `testredis:key${i}`,
+      value: new Date().getTime().toString(),
     };
     const startTime = Date.now();
     await axios.post(`${baseUrl}/set`, payload);

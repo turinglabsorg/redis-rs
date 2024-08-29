@@ -1,10 +1,10 @@
 const axios = require("axios");
 const { fork } = require("child_process");
 
-const BASE_URL = "http://0.0.0.0:3000";
+const BASE_URL = "https://urchin-app-chunz.ondigitalocean.app";
 
 async function stressTest() {
-  const numRequests = 50;
+  const numRequests = 5000;
   const numProcesses = 16;
   const requestsPerProcess = Math.floor(numRequests / numProcesses);
 

@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use dotenv::dotenv;
 use std::env;
+use std::time::Instant;
 
 #[tokio::main]
 async fn main() {
@@ -62,8 +63,14 @@ async fn set_handler(
     State(client): State<Arc<Client>>,
     Json(payload): Json<SetRequest>,
 ) -> impl IntoResponse {
+    let start = Instant::now();
+    
     let mut conn = client.get_connection().unwrap();
     let _: () = conn.set(&payload.key, &payload.value).unwrap();
+    
+    let elapsed = start.elapsed();
+    println!("Time to write to Redis: {:?}", elapsed);
     println!("Key: {}, Value: {}", payload.key, payload.value);
+    
     (StatusCode::OK, Json("OK".to_string()))
 }
