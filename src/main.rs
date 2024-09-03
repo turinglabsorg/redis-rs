@@ -5,13 +5,13 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use dotenv::dotenv;
 use redis::{Client, Commands};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
-use dotenv::dotenv;
 use std::env;
+use std::sync::Arc;
 use std::time::Instant;
+use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
 async fn main() {
@@ -35,6 +35,10 @@ async fn main() {
         .route("/zincrby", post(zincrby_handler))
         .route("/zrange_withscores", get(zrange_withscores_handler))
         .route("/zrevrange_withscores", get(zrevrange_withscores_handler))
+        .route("/hset", post(hset_handler))
+        .route("/hincrby", post(hincrby_handler))
+        .route("/hgetall/:key", get(hgetall_handler))
+        .route("/hget", get(hget_handler))
         .with_state(client);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -69,21 +73,21 @@ async fn set_handler(
     Json(payload): Json<SetRequest>,
 ) -> impl IntoResponse {
     let start = Instant::now();
-    
+
     let mut conn = client.get_connection().unwrap();
     let _: () = conn.set(&payload.key, &payload.value).unwrap();
-    
+
     let elapsed = start.elapsed();
     println!("Time to write to Redis: {:?}", elapsed);
     println!("Key: {}, Value: {}", payload.key, payload.value);
-    
+
     (StatusCode::OK, Json("OK".to_string()))
 }
 
 #[derive(Deserialize)]
 struct ZAddRequest {
     key: String,
-    score: f64,  // Change this from i64 to f64
+    score: f64, // Change this from i64 to f64
     member: String,
 }
 
@@ -92,7 +96,9 @@ async fn zadd_handler(
     Json(payload): Json<ZAddRequest>,
 ) -> impl IntoResponse {
     let mut conn = client.get_connection().unwrap();
-    let _: () = conn.zadd(&payload.key, &payload.member, payload.score).unwrap();
+    let _: () = conn
+        .zadd(&payload.key, &payload.member, payload.score)
+        .unwrap();
 
     (StatusCode::OK, Json("OK".to_string()))
 }
@@ -131,7 +137,9 @@ async fn zincrby_handler(
     Json(payload): Json<ZIncrByRequest>,
 ) -> impl IntoResponse {
     let mut conn = client.get_connection().unwrap();
-    let new_score: f64 = conn.zincr(&payload.key, &payload.member, &payload.increment).unwrap();
+    let new_score: f64 = conn
+        .zincr(&payload.key, &payload.member, &payload.increment)
+        .unwrap();
 
     (StatusCode::OK, Json(new_score.to_string()))
 }
@@ -153,9 +161,16 @@ async fn zrange_withscores_handler(
     Query(query): Query<ZRangeWithScoresRequest>,
 ) -> impl IntoResponse {
     let mut conn = client.get_connection().unwrap();
-    let members_with_scores: Vec<(String, f64)> = conn.zrange_withscores(&query.key, query.start, query.stop).unwrap();
+    let members_with_scores: Vec<(String, f64)> = conn
+        .zrange_withscores(&query.key, query.start, query.stop)
+        .unwrap();
 
-    (StatusCode::OK, Json(ZRangeWithScoresResponse { members_with_scores }))
+    (
+        StatusCode::OK,
+        Json(ZRangeWithScoresResponse {
+            members_with_scores,
+        }),
+    )
 }
 
 #[derive(Deserialize)]
@@ -175,7 +190,85 @@ async fn zrevrange_withscores_handler(
     Query(query): Query<ZRevRangeWithScoresRequest>,
 ) -> impl IntoResponse {
     let mut conn = client.get_connection().unwrap();
-    let members_with_scores: Vec<(String, f64)> = conn.zrevrange_withscores(&query.key, query.start, query.stop).unwrap();
+    let members_with_scores: Vec<(String, f64)> = conn
+        .zrevrange_withscores(&query.key, query.start, query.stop)
+        .unwrap();
 
-    (StatusCode::OK, Json(ZRevRangeWithScoresResponse { members_with_scores }))
+    (
+        StatusCode::OK,
+        Json(ZRevRangeWithScoresResponse {
+            members_with_scores,
+        }),
+    )
+}
+
+#[derive(Deserialize)]
+struct HSetRequest {
+    key: String,
+    fields_and_values: Vec<(String, String)>,
+}
+
+async fn hset_handler(
+    State(client): State<Arc<Client>>,
+    Json(payload): Json<HSetRequest>,
+) -> impl IntoResponse {
+    let mut conn = client.get_connection().unwrap();
+    let _: () = conn
+        .hset_multiple(&payload.key, &payload.fields_and_values)
+        .unwrap();
+
+    (StatusCode::OK, Json("OK".to_string()))
+}
+
+#[derive(Deserialize)]
+struct HIncrByRequest {
+    key: String,
+    field: String,
+    increment: i64,
+}
+
+async fn hincrby_handler(
+    State(client): State<Arc<Client>>,
+    Json(payload): Json<HIncrByRequest>,
+) -> impl IntoResponse {
+    let mut conn = client.get_connection().unwrap();
+    let new_value: i64 = conn
+        .hincr(&payload.key, &payload.field, payload.increment)
+        .unwrap();
+
+    (StatusCode::OK, Json(new_value.to_string()))
+}
+
+#[derive(Serialize)]
+struct HGetAllResponse {
+    fields_and_values: Vec<(String, String)>,
+}
+
+async fn hgetall_handler(
+    Path(key): Path<String>,
+    State(client): State<Arc<Client>>,
+) -> impl IntoResponse {
+    let mut conn = client.get_connection().unwrap();
+    let fields_and_values: Vec<(String, String)> = conn.hgetall(&key).unwrap();
+
+    (StatusCode::OK, Json(HGetAllResponse { fields_and_values }))
+}
+
+#[derive(Deserialize)]
+struct HGetRequest {
+    key: String,
+    field: String,
+}
+
+async fn hget_handler(
+    State(client): State<Arc<Client>>,
+    Query(query): Query<HGetRequest>,
+) -> impl IntoResponse {
+    let mut conn = client.get_connection().unwrap();
+    let value: Option<String> = conn.hget(&query.key, &query.field).unwrap();
+
+    match value {
+        Some(value) => (StatusCode::OK, Json(value)),
+        None => (StatusCode::NOT_FOUND, Json("Field not found".to_string())),
+    }
 }
