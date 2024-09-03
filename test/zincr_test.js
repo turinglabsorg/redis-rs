@@ -6,7 +6,7 @@ async function testZIncrByEndpoint() {
   try {
     const response = await axios.post(`${baseUrl}/zincrby`, {
       key: "testZSet",
-      increment: 8,
+      increment: 338,
       member: "testMember",
     });
     console.log("ZINCRBY endpoint response:", response.data);
@@ -17,7 +17,7 @@ async function testZIncrByEndpoint() {
 
 async function testZRangeEndpoint() {
   try {
-    const response = await axios.get(`${baseUrl}/zrange`, {
+    const response = await axios.get(`${baseUrl}/zrange_withscores`, {
       params: {
         key: "testZSet",
         start: 0,
@@ -30,9 +30,25 @@ async function testZRangeEndpoint() {
   }
 }
 
+async function testZRevRangeWithScoresEndpoint() {
+  try {
+    const response = await axios.get(`${baseUrl}/zrevrange_withscores`, {
+      params: {
+        key: "testZSet",
+        start: 0,
+        stop: -1,
+      },
+    });
+    console.log("ZREVRANGE endpoint response:", response.data);
+  } catch (error) {
+    console.error("Error testing ZREVRANGE endpoint:", error.message);
+  }
+}
+
 async function runTests() {
   await testZIncrByEndpoint();
   await testZRangeEndpoint();
+  await testZRevRangeWithScoresEndpoint();
 }
 
 runTests();

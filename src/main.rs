@@ -33,6 +33,8 @@ async fn main() {
         .route("/zadd", post(zadd_handler))
         .route("/zrange", get(zrange_handler))
         .route("/zincrby", post(zincrby_handler))
+        .route("/zrange_withscores", get(zrange_withscores_handler))
+        .route("/zrevrange_withscores", get(zrevrange_withscores_handler))
         .with_state(client);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -132,4 +134,48 @@ async fn zincrby_handler(
     let new_score: f64 = conn.zincr(&payload.key, &payload.member, &payload.increment).unwrap();
 
     (StatusCode::OK, Json(new_score.to_string()))
+}
+
+#[derive(Deserialize)]
+struct ZRangeWithScoresRequest {
+    key: String,
+    start: isize,
+    stop: isize,
+}
+
+#[derive(Serialize)]
+struct ZRangeWithScoresResponse {
+    members_with_scores: Vec<(String, f64)>,
+}
+
+async fn zrange_withscores_handler(
+    State(client): State<Arc<Client>>,
+    Query(query): Query<ZRangeWithScoresRequest>,
+) -> impl IntoResponse {
+    let mut conn = client.get_connection().unwrap();
+    let members_with_scores: Vec<(String, f64)> = conn.zrange_withscores(&query.key, query.start, query.stop).unwrap();
+
+    (StatusCode::OK, Json(ZRangeWithScoresResponse { members_with_scores }))
+}
+
+#[derive(Deserialize)]
+struct ZRevRangeWithScoresRequest {
+    key: String,
+    start: isize,
+    stop: isize,
+}
+
+#[derive(Serialize)]
+struct ZRevRangeWithScoresResponse {
+    members_with_scores: Vec<(String, f64)>,
+}
+
+async fn zrevrange_withscores_handler(
+    State(client): State<Arc<Client>>,
+    Query(query): Query<ZRevRangeWithScoresRequest>,
+) -> impl IntoResponse {
+    let mut conn = client.get_connection().unwrap();
+    let members_with_scores: Vec<(String, f64)> = conn.zrevrange_withscores(&query.key, query.start, query.stop).unwrap();
+
+    (StatusCode::OK, Json(ZRevRangeWithScoresResponse { members_with_scores }))
 }
