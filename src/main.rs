@@ -1,12 +1,12 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use redis::{Client, Commands};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use dotenv::dotenv;
@@ -30,6 +30,9 @@ async fn main() {
         .route("/", get(root))
         .route("/get/:key", get(get_handler))
         .route("/set", post(set_handler))
+        .route("/zadd", post(zadd_handler))
+        .route("/zrange", get(zrange_handler))
+        .route("/zincrby", post(zincrby_handler))
         .with_state(client);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -73,4 +76,60 @@ async fn set_handler(
     println!("Key: {}, Value: {}", payload.key, payload.value);
     
     (StatusCode::OK, Json("OK".to_string()))
+}
+
+#[derive(Deserialize)]
+struct ZAddRequest {
+    key: String,
+    score: f64,  // Change this from i64 to f64
+    member: String,
+}
+
+async fn zadd_handler(
+    State(client): State<Arc<Client>>,
+    Json(payload): Json<ZAddRequest>,
+) -> impl IntoResponse {
+    let mut conn = client.get_connection().unwrap();
+    let _: () = conn.zadd(&payload.key, &payload.member, payload.score).unwrap();
+
+    (StatusCode::OK, Json("OK".to_string()))
+}
+
+#[derive(Deserialize)]
+struct ZRangeRequest {
+    key: String,
+    start: isize,
+    stop: isize,
+}
+
+#[derive(Serialize)]
+struct ZRangeResponse {
+    members: Vec<String>,
+}
+
+async fn zrange_handler(
+    State(client): State<Arc<Client>>,
+    Query(query): Query<ZRangeRequest>,
+) -> impl IntoResponse {
+    let mut conn = client.get_connection().unwrap();
+    let members: Vec<String> = conn.zrange(&query.key, query.start, query.stop).unwrap();
+
+    (StatusCode::OK, Json(ZRangeResponse { members }))
+}
+
+#[derive(Deserialize)]
+struct ZIncrByRequest {
+    key: String,
+    increment: f64,
+    member: String,
+}
+
+async fn zincrby_handler(
+    State(client): State<Arc<Client>>,
+    Json(payload): Json<ZIncrByRequest>,
+) -> impl IntoResponse {
+    let mut conn = client.get_connection().unwrap();
+    let new_score: f64 = conn.zincr(&payload.key, &payload.member, &payload.increment).unwrap();
+
+    (StatusCode::OK, Json(new_score.to_string()))
 }
